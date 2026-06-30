@@ -1,13 +1,9 @@
-pages/
+Analises.py
 
-dashboard.py
+Dados.py
 
-analises.py
+Relatorios.py
 
-dados.py
+Agente.py
 
-relatorios.py
-
-chat.py
-
-configuracoes.py
+Configuracoes.py
