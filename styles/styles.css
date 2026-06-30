@@ -1,1 +1,18 @@
+.block-container{
+    padding-top:2rem;
+}
 
+h1{
+    color:#2563EB;
+}
+
+div[data-testid="stMetric"]{
+    border-radius:12px;
+    border:1px solid #E5E7EB;
+    padding:15px;
+    background-color:#FFFFFF;
+}
+
+section[data-testid="stSidebar"]{
+    border-right:1px solid #E5E7EB;
+}
