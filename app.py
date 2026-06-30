@@ -2,15 +2,25 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 
+from components.sidebar import mostrar_sidebar
+
+# ==========================
+# Configuração da página
+# ==========================
+
 st.set_page_config(
     page_title="Insight AI",
     page_icon="📊",
-    layout="wide"
+    layout="wide",
+    initial_sidebar_state="expanded"
 )
 
-# ----------------------------
+# Sidebar
+mostrar_sidebar()
+
+# ==========================
 # Título
-# ----------------------------
+# ==========================
 
 st.title("📊 Insight AI")
 
@@ -24,74 +34,67 @@ st.write(
     """
 O Insight AI será uma plataforma capaz de:
 
-- Analisar vendas;
-- Gerar dashboards automaticamente;
-- Encontrar oportunidades;
-- Detectar problemas;
-- Criar previsões;
-- Conversar com seus dados.
+- 📈 Analisar vendas
+- 📂 Receber planilhas Excel
+- 🔗 Conectar APIs do ERP
+- 📊 Gerar dashboards automaticamente
+- 🤖 Encontrar oportunidades usando IA
+- 📄 Criar relatórios inteligentes
+- 💬 Conversar com seus dados
 """
 )
 
 st.divider()
 
-# ----------------------------
+# ==========================
 # Cards
-# ----------------------------
+# ==========================
 
 col1, col2, col3, col4 = st.columns(4)
 
-col1.metric("💰 Faturamento", "R$ 185.000", "+12%")
+with col1:
+    st.metric("💰 Faturamento", "R$ 185.000", "+12%")
 
-col2.metric("👥 Clientes", "1.245", "+8")
+with col2:
+    st.metric("👥 Clientes", "1.245", "+8")
 
-col3.metric("📦 Produtos", "87")
+with col3:
+    st.metric("📦 Produtos", "87", "+5")
 
-col4.metric("📈 Crescimento", "12%")
+with col4:
+    st.metric("📈 Crescimento", "12%", "+2%")
 
 st.divider()
 
-# ----------------------------
+# ==========================
 # Dados fictícios
-# ----------------------------
+# ==========================
 
-dados = pd.DataFrame(
-    {
-        "Mês": [
-            "Jan",
-            "Fev",
-            "Mar",
-            "Abr",
-            "Mai",
-            "Jun"
-        ],
-        "Vendas": [
-            150,
-            180,
-            210,
-            240,
-            260,
-            310
-        ]
-    }
-)
+dados = pd.DataFrame({
+    "Mês": ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun"],
+    "Vendas": [150, 180, 210, 240, 260, 310]
+})
 
 fig = px.line(
     dados,
     x="Mês",
     y="Vendas",
     markers=True,
-    title="Evolução das vendas"
+    title="📈 Evolução das vendas"
 )
 
 st.plotly_chart(fig, use_container_width=True)
 
 st.divider()
 
+# ==========================
+# Insights
+# ==========================
+
 st.subheader("💡 Insights encontrados")
 
-st.success("Produto A apresentou crescimento de 18%.")
+st.success("📈 Produto A apresentou crescimento de 18%.")
 
-st.warning("Região Sul teve queda nas vendas.")
+st.warning("⚠ Região Sul teve queda nas vendas.")
 
-st.info("Existe oportunidade para aumentar o estoque do Produto B.")
+st.info("💡 Existe oportunidade para aumentar o estoque do Produto B.")
