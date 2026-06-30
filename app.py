@@ -1,60 +1,97 @@
 import streamlit as st
-
-# ==========================
-# Configuração da página
-# ==========================
+import pandas as pd
+import plotly.express as px
 
 st.set_page_config(
     page_title="Insight AI",
     page_icon="📊",
-    layout="wide",
-    initial_sidebar_state="expanded"
+    layout="wide"
 )
 
-# ==========================
-# Sidebar
-# ==========================
+# ----------------------------
+# Título
+# ----------------------------
 
-with st.sidebar:
+st.title("📊 Insight AI")
 
-    st.title("📊 Insight AI")
+st.caption("Transformando dados em decisões inteligentes.")
 
-    st.caption("Transformando dados em decisões inteligentes.")
+st.divider()
 
-    st.divider()
-
-    st.page_link("app.py", label="🏠 Dashboard")
-
-    st.page_link("pages/Analises.py", label="📈 Análises")
-
-    st.page_link("pages/Dados.py", label="📂 Dados")
-
-    st.page_link("pages/Relatorios.py", label="📄 Relatórios")
-
-    st.page_link("pages/Agente.py", label="🤖 Insight AI")
-
-    st.page_link("pages/Configuracoes.py", label="⚙ Configurações")
-
-# ==========================
-# Página principal
-# ==========================
-
-st.title("📊 Dashboard")
-
-st.subheader("Bem-vindo ao Insight AI")
+st.header("👋 Bem-vindo!")
 
 st.write(
     """
-Nosso objetivo é transformar dados em decisões inteligentes.
+O Insight AI será uma plataforma capaz de:
 
-Em breve você poderá:
-
-- Fazer upload de planilhas;
-- Conectar APIs do seu ERP;
+- Analisar vendas;
 - Gerar dashboards automaticamente;
-- Receber insights da IA;
+- Encontrar oportunidades;
+- Detectar problemas;
+- Criar previsões;
 - Conversar com seus dados.
 """
 )
 
-st.info("Sprint 1 - Interface em desenvolvimento 🚀")
+st.divider()
+
+# ----------------------------
+# Cards
+# ----------------------------
+
+col1, col2, col3, col4 = st.columns(4)
+
+col1.metric("💰 Faturamento", "R$ 185.000", "+12%")
+
+col2.metric("👥 Clientes", "1.245", "+8")
+
+col3.metric("📦 Produtos", "87")
+
+col4.metric("📈 Crescimento", "12%")
+
+st.divider()
+
+# ----------------------------
+# Dados fictícios
+# ----------------------------
+
+dados = pd.DataFrame(
+    {
+        "Mês": [
+            "Jan",
+            "Fev",
+            "Mar",
+            "Abr",
+            "Mai",
+            "Jun"
+        ],
+        "Vendas": [
+            150,
+            180,
+            210,
+            240,
+            260,
+            310
+        ]
+    }
+)
+
+fig = px.line(
+    dados,
+    x="Mês",
+    y="Vendas",
+    markers=True,
+    title="Evolução das vendas"
+)
+
+st.plotly_chart(fig, use_container_width=True)
+
+st.divider()
+
+st.subheader("💡 Insights encontrados")
+
+st.success("Produto A apresentou crescimento de 18%.")
+
+st.warning("Região Sul teve queda nas vendas.")
+
+st.info("Existe oportunidade para aumentar o estoque do Produto B.")
