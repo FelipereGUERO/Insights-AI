@@ -1,13 +1,21 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
+import plotly.graph_objects as go
 
 from components.data_store import inicializar_estado_dados, obter_dados
+
 from components.column_config import (
     inicializar_configuracao_colunas,
     obter_configuracao_colunas,
     aplicar_configuracao_automatica,
     encontrar_indice_opcao
+)
+
+from components.insight_engine import (
+    executar_insight_engine,
+    formatar_numero,
+    formatar_percentual
 )
 
 
@@ -20,41 +28,6 @@ st.set_page_config(
 
 inicializar_estado_dados()
 inicializar_configuracao_colunas()
-
-
-def formatar_numero(valor):
-    """
-    Formata números no padrão brasileiro.
-    """
-
-    try:
-        return f"{valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-    except:
-        return valor
-
-
-def remover_linhas_totais(df, coluna_categoria):
-    """
-    Remove linhas como Total Geral, Total, Grand Total e Subtotal.
-    """
-
-    if coluna_categoria is None:
-        return df
-
-    termos_total = [
-        "total",
-        "total geral",
-        "grand total",
-        "subtotal"
-    ]
-
-    df_temp = df.copy()
-
-    coluna_texto = df_temp[coluna_categoria].astype(str).str.strip().str.lower()
-
-    mascara_total = coluna_texto.isin(termos_total)
-
-    return df_temp[~mascara_total]
 
 
 def identificar_colunas(df):
@@ -71,67 +44,90 @@ def identificar_colunas(df):
     return colunas_texto, colunas_numericas
 
 
-def gerar_resumo_automatico(df, coluna_categoria, coluna_valor):
+def exibir_card_insight(insight):
     """
-    Gera indicadores básicos da análise.
+    Exibe insight com visual conforme o nível.
     """
 
-    if coluna_categoria is None or coluna_valor is None:
-        return None
+    texto = f"**{insight['titulo']}**  \n{insight['texto']}"
 
-    df_analise = remover_linhas_totais(df, coluna_categoria)
+    if insight["nivel"] == "success":
+        st.success(texto)
+    elif insight["nivel"] == "warning":
+        st.warning(texto)
+    elif insight["nivel"] == "error":
+        st.error(texto)
+    else:
+        st.info(texto)
 
-    df_analise = df_analise[[coluna_categoria, coluna_valor]].dropna()
 
-    if df_analise.empty:
-        return None
+def criar_grafico_pareto(df_agrupado, coluna_categoria, coluna_valor):
+    """
+    Cria gráfico de Pareto com barras e linha acumulada.
+    """
 
-    df_agrupado = (
-        df_analise
-        .groupby(coluna_categoria, as_index=False)[coluna_valor]
-        .sum()
-        .sort_values(by=coluna_valor, ascending=False)
+    fig = go.Figure()
+
+    fig.add_trace(
+        go.Bar(
+            x=df_agrupado[coluna_categoria],
+            y=df_agrupado[coluna_valor],
+            name=coluna_valor,
+            marker_color="#2563EB"
+        )
     )
 
-    total = df_agrupado[coluna_valor].sum()
+    fig.add_trace(
+        go.Scatter(
+            x=df_agrupado[coluna_categoria],
+            y=df_agrupado["Participação acumulada %"],
+            name="Participação acumulada %",
+            yaxis="y2",
+            mode="lines+markers",
+            marker_color="#F97316"
+        )
+    )
 
-    if df_agrupado.empty:
-        return None
+    fig.add_hline(
+        y=80,
+        line_dash="dash",
+        line_color="red",
+        annotation_text="80%",
+        annotation_position="top left",
+        yref="y2"
+    )
 
-    maior_linha = df_agrupado.iloc[0]
-    menor_linha = df_agrupado.iloc[-1]
+    fig.update_layout(
+        title="Curva de Pareto",
+        xaxis_title=coluna_categoria,
+        yaxis=dict(
+            title=coluna_valor
+        ),
+        yaxis2=dict(
+            title="Participação acumulada %",
+            overlaying="y",
+            side="right",
+            range=[0, 105]
+        ),
+        height=550,
+        legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            y=1.02,
+            xanchor="right",
+            x=1
+        )
+    )
 
-    maior_categoria = maior_linha[coluna_categoria]
-    maior_valor = maior_linha[coluna_valor]
-
-    menor_categoria = menor_linha[coluna_categoria]
-    menor_valor = menor_linha[coluna_valor]
-
-    participacao_maior = 0
-
-    if total != 0:
-        participacao_maior = maior_valor / total * 100
-
-    resumo = {
-        "df_agrupado": df_agrupado,
-        "total": total,
-        "maior_categoria": maior_categoria,
-        "maior_valor": maior_valor,
-        "menor_categoria": menor_categoria,
-        "menor_valor": menor_valor,
-        "participacao_maior": participacao_maior,
-        "quantidade_categorias": df_agrupado[coluna_categoria].nunique()
-    }
-
-    return resumo
+    return fig
 
 
-st.title("📊 Análises")
+st.title("📊 Análises Avançadas")
 
 st.write(
     """
-    O Insight AI analisa automaticamente a planilha carregada e gera indicadores,
-    gráficos e rankings com base nas colunas identificadas.
+    O Insight AI analisa automaticamente a planilha carregada, identifica padrões,
+    calcula indicadores e gera insights executivos.
     """
 )
 
@@ -150,69 +146,46 @@ else:
     if config.get("coluna_categoria") is None or config.get("coluna_valor") is None:
         config = aplicar_configuracao_automatica(df, sobrescrever=True)
 
-    st.success(f"Arquivo em análise: {st.session_state.nome_arquivo}")
-
-    st.subheader("Resumo da base de dados")
-
-    col1, col2, col3, col4 = st.columns(4)
-
-    with col1:
-        st.metric("Linhas", df.shape[0])
-
-    with col2:
-        st.metric("Colunas", df.shape[1])
-
-    with col3:
-        st.metric(
-            "Campos numéricos",
-            len(df.select_dtypes(include="number").columns)
-        )
-
-    with col4:
-        st.metric(
-            "Modo",
-            config.get("modo", "automatico").capitalize()
-        )
-
-    st.divider()
-
-    st.subheader("Colunas usadas na análise")
-
-    col_auto1, col_auto2, col_auto3 = st.columns(3)
-
-    with col_auto1:
-        st.info(f"Categoria: **{config.get('coluna_categoria') or 'Não detectada'}**")
-
-    with col_auto2:
-        st.info(f"Valor principal: **{config.get('coluna_valor') or 'Não detectado'}**")
-
-    with col_auto3:
-        st.info(f"Percentual: **{config.get('coluna_percentual') or 'Não detectado'}**")
-
-    st.divider()
-
     colunas_texto, colunas_numericas = identificar_colunas(df)
 
     coluna_categoria_auto = config.get("coluna_categoria")
     coluna_valor_auto = config.get("coluna_valor")
 
+    st.success(f"Arquivo em análise: {st.session_state.nome_arquivo}")
+
+    col_base1, col_base2, col_base3, col_base4 = st.columns(4)
+
+    with col_base1:
+        st.metric("Linhas", df.shape[0])
+
+    with col_base2:
+        st.metric("Colunas", df.shape[1])
+
+    with col_base3:
+        st.metric("Campos numéricos", len(colunas_numericas))
+
+    with col_base4:
+        st.metric("Modo", config.get("modo", "automatico").capitalize())
+
+    st.divider()
+
     if len(colunas_texto) == 0:
         st.warning("Não encontrei colunas de texto para usar como categoria.")
 
     elif len(colunas_numericas) == 0:
-        st.warning("Não encontrei colunas numéricas para gerar gráficos.")
+        st.warning("Não encontrei colunas numéricas para gerar análise.")
 
     elif coluna_categoria_auto is None or coluna_valor_auto is None:
         st.warning("Não foi possível identificar automaticamente as colunas principais.")
         st.info("Vá até a página Dados e ajuste as colunas manualmente, se necessário.")
 
     else:
-        with st.expander("Alterar colunas desta análise"):
-            col_config1, col_config2 = st.columns(2)
+        with st.expander("Colunas usadas na análise"):
+            col_config1, col_config2, col_config3 = st.columns(3)
 
             with col_config1:
                 coluna_categoria = st.selectbox(
-                    "Escolha a coluna de categoria:",
+                    "Categoria",
                     colunas_texto,
                     index=encontrar_indice_opcao(
                         colunas_texto,
@@ -222,7 +195,7 @@ else:
 
             with col_config2:
                 coluna_valor = st.selectbox(
-                    "Escolha a coluna de valor:",
+                    "Valor principal",
                     colunas_numericas,
                     index=encontrar_indice_opcao(
                         colunas_numericas,
@@ -230,178 +203,268 @@ else:
                     )
                 )
 
-        # Fora do expander, usa automaticamente as colunas detectadas/selecionadas
-        if "coluna_categoria" not in locals():
-            coluna_categoria = coluna_categoria_auto
+            with col_config3:
+                st.write("Configuração automática")
+                st.info(
+                    f"""
+                    Categoria: **{coluna_categoria_auto}**  
+                    Valor: **{coluna_valor_auto}**
+                    """
+                )
 
-        if "coluna_valor" not in locals():
-            coluna_valor = coluna_valor_auto
-
-        resumo = gerar_resumo_automatico(
+        resultado = executar_insight_engine(
             df,
             coluna_categoria,
             coluna_valor
         )
 
-        if resumo is None:
+        if resultado is None:
             st.warning("Não foi possível gerar análise com as colunas identificadas.")
 
         else:
-            df_agrupado = resumo["df_agrupado"]
+            df_agrupado = resultado["df_agrupado"]
+            metricas = resultado["metricas"]
+            insights = resultado["insights"]
+            recomendacoes = resultado["recomendacoes"]
 
-            st.subheader("Indicadores principais")
+            st.subheader("Resumo executivo")
+
+            resumo_texto = (
+                f"Foram analisadas **{metricas['quantidade_categorias']} categorias**, "
+                f"com total de **{formatar_numero(metricas['total'])}** em **{coluna_valor}**. "
+                f"A principal categoria é **{metricas['maior_categoria']}**, representando "
+                f"**{formatar_percentual(metricas['maior_participacao'])}** do total. "
+                f"As três maiores categorias concentram "
+                f"**{formatar_percentual(metricas['participacao_top_3'])}** do resultado."
+            )
+
+            st.info(resumo_texto)
 
             col_ind1, col_ind2, col_ind3, col_ind4 = st.columns(4)
 
             with col_ind1:
                 st.metric(
-                    "Total",
-                    formatar_numero(resumo["total"])
+                    "Total analisado",
+                    formatar_numero(metricas["total"])
                 )
 
             with col_ind2:
                 st.metric(
                     "Maior categoria",
-                    str(resumo["maior_categoria"]),
-                    formatar_numero(resumo["maior_valor"])
+                    str(metricas["maior_categoria"]),
+                    formatar_numero(metricas["maior_valor"])
                 )
 
             with col_ind3:
                 st.metric(
-                    "Participação da maior",
-                    f"{resumo['participacao_maior']:.2f}%"
+                    "Top 3",
+                    formatar_percentual(metricas["participacao_top_3"])
                 )
 
             with col_ind4:
                 st.metric(
                     "Categorias",
-                    resumo["quantidade_categorias"]
+                    metricas["quantidade_categorias"]
                 )
 
             st.divider()
 
-            st.subheader("Gráfico automático")
-
-            tipo_grafico = st.radio(
-                "Tipo de visualização:",
+            aba1, aba2, aba3, aba4, aba5 = st.tabs(
                 [
-                    "Barras horizontais",
-                    "Barras - ranking",
-                    "Pizza - participação"
-                ],
-                horizontal=True
+                    "Visão Geral",
+                    "Curva ABC / Pareto",
+                    "Outliers",
+                    "Insights",
+                    "Dados"
+                ]
             )
 
-            top_n = st.slider(
-                "Quantidade de categorias no gráfico:",
-                min_value=3,
-                max_value=min(30, len(df_agrupado)),
-                value=min(10, len(df_agrupado))
-            )
+            with aba1:
+                st.subheader("Ranking principal")
 
-            df_top = df_agrupado.head(top_n)
+                quantidade_categorias = len(df_agrupado)
 
-            if tipo_grafico == "Barras horizontais":
+                if quantidade_categorias <= 3:
+                    top_n = quantidade_categorias
+                else:
+                    top_n = st.slider(
+                        "Quantidade de categorias no gráfico:",
+                        min_value=3,
+                        max_value=min(30, quantidade_categorias),
+                        value=min(10, quantidade_categorias)
+                    )
+
+                df_top = df_agrupado.head(top_n)
+
                 df_top_horizontal = df_top.sort_values(
                     by=coluna_valor,
                     ascending=True
                 )
 
-                fig = px.bar(
+                fig_barra = px.bar(
                     df_top_horizontal,
                     x=coluna_valor,
                     y=coluna_categoria,
                     orientation="h",
                     text=coluna_valor,
-                    title=f"Ranking de {coluna_categoria} por {coluna_valor}"
+                    color="Classe ABC",
+                    title=f"Ranking de {coluna_categoria} por {coluna_valor}",
+                    color_discrete_map={
+                        "A": "#2563EB",
+                        "B": "#F97316",
+                        "C": "#94A3B8"
+                    }
                 )
 
-                fig.update_traces(
+                fig_barra.update_traces(
                     texttemplate="%{text:,.2f}",
                     textposition="outside"
                 )
 
-                fig.update_layout(
+                fig_barra.update_layout(
+                    height=550,
                     xaxis_title=coluna_valor,
-                    yaxis_title=coluna_categoria,
-                    height=550
+                    yaxis_title=coluna_categoria
                 )
 
-            elif tipo_grafico == "Barras - ranking":
-                fig = px.bar(
-                    df_top,
-                    x=coluna_categoria,
+                st.plotly_chart(fig_barra, use_container_width=True)
+
+                col_g1, col_g2 = st.columns(2)
+
+                with col_g1:
+                    fig_pizza = px.pie(
+                        df_top,
+                        names=coluna_categoria,
+                        values=coluna_valor,
+                        title="Participação das principais categorias"
+                    )
+
+                    fig_pizza.update_layout(height=450)
+
+                    st.plotly_chart(fig_pizza, use_container_width=True)
+
+                with col_g2:
+                    fig_treemap = px.treemap(
+                        df_top,
+                        path=[coluna_categoria],
+                        values=coluna_valor,
+                        color="Participação %",
+                        title="Mapa de contribuição",
+                        color_continuous_scale="Blues"
+                    )
+
+                    fig_treemap.update_layout(height=450)
+
+                    st.plotly_chart(fig_treemap, use_container_width=True)
+
+            with aba2:
+                st.subheader("Curva ABC e Pareto")
+
+                fig_pareto = criar_grafico_pareto(
+                    df_agrupado,
+                    coluna_categoria,
+                    coluna_valor
+                )
+
+                st.plotly_chart(fig_pareto, use_container_width=True)
+
+                st.subheader("Resumo por classe ABC")
+
+                classes_abc = metricas["classes_abc"].copy()
+
+                classes_abc["Participacao"] = classes_abc["Participacao"].round(2)
+
+                st.dataframe(
+                    classes_abc,
+                    use_container_width=True
+                )
+
+                st.info(
+                    """
+                    A Curva ABC ajuda a identificar quais categorias merecem maior atenção.
+                    Normalmente, itens Classe A concentram a maior parte do resultado e devem ser priorizados.
+                    """
+                )
+
+            with aba3:
+                st.subheader("Análise de outliers")
+
+                outliers_superiores = metricas["outliers"]["outliers_superiores"]
+                outliers_inferiores = metricas["outliers"]["outliers_inferiores"]
+
+                fig_box = px.box(
+                    df_agrupado,
                     y=coluna_valor,
-                    text=coluna_valor,
-                    title=f"Ranking de {coluna_categoria} por {coluna_valor}"
+                    points="all",
+                    title=f"Distribuição e possíveis outliers de {coluna_valor}"
                 )
 
-                fig.update_traces(
-                    texttemplate="%{text:,.2f}",
-                    textposition="outside"
+                fig_box.update_layout(height=500)
+
+                st.plotly_chart(fig_box, use_container_width=True)
+
+                col_out1, col_out2 = st.columns(2)
+
+                with col_out1:
+                    st.write("Categorias muito acima do padrão")
+
+                    if outliers_superiores.empty:
+                        st.success("Nenhum outlier superior relevante identificado.")
+                    else:
+                        st.warning("Foram encontrados valores muito acima do padrão.")
+                        st.dataframe(outliers_superiores, use_container_width=True)
+
+                with col_out2:
+                    st.write("Categorias muito abaixo do padrão")
+
+                    if outliers_inferiores.empty:
+                        st.success("Nenhum outlier inferior relevante identificado.")
+                    else:
+                        st.warning("Foram encontrados valores muito abaixo do padrão.")
+                        st.dataframe(outliers_inferiores, use_container_width=True)
+
+            with aba4:
+                st.subheader("Insights automáticos")
+
+                for insight in insights:
+                    exibir_card_insight(insight)
+
+                st.divider()
+
+                st.subheader("Recomendações automáticas")
+
+                for i, recomendacao in enumerate(recomendacoes, start=1):
+                    st.write(f"**{i}.** {recomendacao}")
+
+            with aba5:
+                st.subheader("Ranking detalhado")
+
+                df_exibicao = df_agrupado.copy()
+
+                df_exibicao["Participação %"] = df_exibicao["Participação %"].round(2)
+                df_exibicao["Participação acumulada %"] = (
+                    df_exibicao["Participação acumulada %"].round(2)
                 )
 
-                fig.update_layout(
-                    xaxis_title=coluna_categoria,
-                    yaxis_title=coluna_valor,
-                    height=550
+                colunas_ordenadas = [
+                    "Ranking",
+                    coluna_categoria,
+                    coluna_valor,
+                    "Participação %",
+                    "Participação acumulada %",
+                    "Classe ABC"
+                ]
+
+                st.dataframe(
+                    df_exibicao[colunas_ordenadas],
+                    use_container_width=True
                 )
 
-            else:
-                fig = px.pie(
-                    df_top,
-                    names=coluna_categoria,
-                    values=coluna_valor,
-                    title=f"Participação por {coluna_categoria}"
+                st.divider()
+
+                st.subheader("Prévia da base original")
+
+                st.dataframe(
+                    df.head(30),
+                    use_container_width=True
                 )
-
-                fig.update_layout(
-                    height=550
-                )
-
-            st.plotly_chart(fig, use_container_width=True)
-
-            st.divider()
-
-            st.subheader("Ranking detalhado")
-
-            df_ranking = df_agrupado.copy()
-
-            if resumo["total"] != 0:
-                df_ranking["Participação %"] = (
-                    df_ranking[coluna_valor] / resumo["total"] * 100
-                )
-            else:
-                df_ranking["Participação %"] = 0
-
-            df_ranking["Participação %"] = df_ranking["Participação %"].round(2)
-
-            st.dataframe(
-                df_ranking,
-                use_container_width=True
-            )
-
-            st.divider()
-
-            st.subheader("Insights automáticos")
-
-            st.success(
-                f"A maior categoria é **{resumo['maior_categoria']}**, "
-                f"com **{formatar_numero(resumo['maior_valor'])}**."
-            )
-
-            st.info(
-                f"A categoria **{resumo['maior_categoria']}** representa "
-                f"**{resumo['participacao_maior']:.2f}%** do total analisado."
-            )
-
-            st.warning(
-                f"A menor categoria é **{resumo['menor_categoria']}**, "
-                f"com **{formatar_numero(resumo['menor_valor'])}**."
-            )
-
-    st.divider()
-
-    st.subheader("Prévia dos dados")
-
-    st.dataframe(df.head(20), use_container_width=True)
