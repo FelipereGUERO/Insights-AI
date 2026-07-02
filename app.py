@@ -1,6 +1,5 @@
 import streamlit as st
 import plotly.express as px
-from datetime import datetime
 
 from components.data_store import (
     inicializar_estado_dados,
@@ -32,83 +31,27 @@ inicializar_estado_dados()
 inicializar_configuracao_colunas()
 
 
-def saudacao():
-    hora = datetime.now().hour
+def identificar_colunas(df):
+    """
+    Identifica colunas de texto e numéricas.
+    """
 
-    if hora < 12:
-        return "Bom dia"
-    elif hora < 18:
-        return "Boa tarde"
-    else:
-        return "Boa noite"
+    colunas_texto = df.select_dtypes(
+        include=["object", "string"]
+    ).columns.tolist()
 
+    colunas_numericas = df.select_dtypes(
+        include="number"
+    ).columns.tolist()
 
-def exibir_tela_sem_dados():
-    st.title("🧠 Insight AI")
-
-    st.subheader("Central de Insights")
-
-    st.write(
-        """
-        Envie uma planilha Excel ou CSV para que o Insight AI analise os dados,
-        identifique padrões e gere recomendações automáticas.
-        """
-    )
-
-    st.divider()
-
-    col1, col2, col3 = st.columns(3)
-
-    with col1:
-        st.info(
-            """
-            **1. Envie os dados**  
-            Faça upload de uma planilha na página **Dados**.
-            """
-        )
-
-    with col2:
-        st.info(
-            """
-            **2. O sistema analisa**  
-            O Insight AI identifica colunas, rankings, concentração, curva ABC e outliers.
-            """
-        )
-
-    with col3:
-        st.info(
-            """
-            **3. Receba insights**  
-            Veja resumo executivo, alertas e recomendações automáticas.
-            """
-        )
-
-    st.divider()
-
-    st.warning("Nenhuma planilha foi carregada ainda.")
-
-    st.write("Para começar, acesse a página **Dados** no menu lateral e envie uma planilha.")
-
-    st.divider()
-
-    st.subheader("O que o Insight AI já consegue analisar")
-
-    col_a, col_b, col_c, col_d = st.columns(4)
-
-    with col_a:
-        st.metric("Ranking", "Ativo")
-
-    with col_b:
-        st.metric("Curva ABC", "Ativo")
-
-    with col_c:
-        st.metric("Pareto", "Ativo")
-
-    with col_d:
-        st.metric("Outliers", "Ativo")
+    return colunas_texto, colunas_numericas
 
 
-def exibir_card_insight(insight):
+def exibir_insight(insight):
+    """
+    Exibe um insight com visual conforme o nível.
+    """
+
     texto = f"**{insight['titulo']}**  \n{insight['texto']}"
 
     if insight["nivel"] == "success":
@@ -121,89 +64,101 @@ def exibir_card_insight(insight):
         st.info(texto)
 
 
-def gerar_texto_resumo_executivo(metricas, coluna_valor):
-    texto = (
-        f"{saudacao()}! O Insight AI analisou os dados carregados e encontrou "
-        f"**{metricas['quantidade_categorias']} categorias** com total de "
-        f"**{formatar_numero(metricas['total'])}** em **{coluna_valor}**. "
-        f"A principal categoria é **{metricas['maior_categoria']}**, com participação de "
-        f"**{formatar_percentual(metricas['maior_participacao'])}**. "
-        f"As três maiores categorias concentram "
-        f"**{formatar_percentual(metricas['participacao_top_3'])}** do resultado."
+def exibir_estado_sem_dados():
+    """
+    Tela exibida quando nenhuma planilha foi carregada.
+    """
+
+    st.title("🧠 Insight AI")
+
+    st.caption("Transformando dados em decisões inteligentes.")
+
+    st.divider()
+
+    st.header("Central de Insights")
+
+    st.write(
+        """
+        Bem-vindo ao **Insight AI**.
+
+        Esta será a tela principal do sistema. Aqui o usuário verá primeiro os principais
+        achados da análise, antes mesmo de olhar gráficos ou tabelas.
+        """
     )
 
-    return texto
+    st.info(
+        """
+        Para começar, vá até a página **Dados** e envie uma planilha Excel ou CSV.
+        Depois volte para esta tela para visualizar o resumo executivo automático.
+        """
+    )
+
+    st.divider()
+
+    col1, col2, col3 = st.columns(3)
+
+    with col1:
+        st.metric("Status", "Aguardando dados")
+
+    with col2:
+        st.metric("Upload", "Pendente")
+
+    with col3:
+        st.metric("Insight Engine", "Pronto")
+
+    st.divider()
+
+    st.subheader("Como funciona")
+
+    passo1, passo2, passo3 = st.columns(3)
+
+    with passo1:
+        st.markdown(
+            """
+            ### 1. Envie os dados
+            Faça upload de uma planilha Excel ou CSV na página **Dados**.
+            """
+        )
+
+    with passo2:
+        st.markdown(
+            """
+            ### 2. O sistema analisa
+            O Data Engine identifica colunas, valores, categorias e padrões.
+            """
+        )
+
+    with passo3:
+        st.markdown(
+            """
+            ### 3. Receba insights
+            A Central de Insights mostra alertas, recomendações e resumo executivo.
+            """
+        )
+
+    st.divider()
+
+    st.subheader("O que o MVP já consegue analisar")
+
+    st.write(
+        """
+        - Ranking por categoria;
+        - Total analisado;
+        - Participação percentual;
+        - Curva ABC;
+        - Pareto;
+        - Concentração Top 3;
+        - Outliers;
+        - Recomendações automáticas;
+        - Resumo executivo.
+        """
+    )
 
 
-def classificar_nivel_atencao(metricas):
-    pontos = 0
-
-    if metricas["participacao_top_3"] >= 80:
-        pontos += 2
-    elif metricas["participacao_top_3"] >= 60:
-        pontos += 1
-
-    if metricas["maior_participacao"] >= 40:
-        pontos += 2
-    elif metricas["maior_participacao"] >= 25:
-        pontos += 1
-
-    if metricas["menor_participacao"] < 1:
-        pontos += 1
-
-    if not metricas["outliers"]["outliers_superiores"].empty:
-        pontos += 1
-
-    if pontos >= 5:
-        return "Alto", "🔴"
-    elif pontos >= 3:
-        return "Médio", "🟠"
-    else:
-        return "Baixo", "🟢"
-
-
-def calcular_insight_score(metricas):
-    score = 100
-
-    if metricas["participacao_top_3"] >= 80:
-        score -= 20
-    elif metricas["participacao_top_3"] >= 60:
-        score -= 10
-
-    if metricas["maior_participacao"] >= 50:
-        score -= 20
-    elif metricas["maior_participacao"] >= 40:
-        score -= 10
-
-    if metricas["menor_participacao"] < 1:
-        score -= 5
-
-    if not metricas["outliers"]["outliers_superiores"].empty:
-        score -= 10
-
-    if score < 0:
-        score = 0
-
-    return score
-
-
-st.title("🧠 Central de Insights")
-
-st.write(
+def exibir_central_com_dados(df):
     """
-    Esta é a página principal do Insight AI. Aqui você vê primeiro os achados mais importantes,
-    antes de entrar nos gráficos e dados detalhados.
+    Tela principal quando já existe uma planilha carregada.
     """
-)
-
-st.divider()
-
-
-if not st.session_state.dados_carregados:
-    exibir_tela_sem_dados()
-
-else:
-    df = obter_dados()
 
     config = obter_configuracao_colunas()
 
@@ -213,190 +168,201 @@ else:
     coluna_categoria = config.get("coluna_categoria")
     coluna_valor = config.get("coluna_valor")
 
-    if coluna_categoria is None or coluna_valor is None:
-        st.warning("Não foi possível identificar automaticamente as colunas principais.")
-        st.info("Acesse a página Dados e ajuste as colunas manualmente, se necessário.")
+    colunas_texto, colunas_numericas = identificar_colunas(df)
 
-    else:
-        resultado = executar_insight_engine(
-            df,
-            coluna_categoria,
-            coluna_valor
+    st.title("🧠 Central de Insights")
+
+    st.caption("Resumo executivo automático da análise carregada.")
+
+    st.divider()
+
+    st.success(f"Arquivo atual: {st.session_state.nome_arquivo}")
+
+    col_base1, col_base2, col_base3, col_base4 = st.columns(4)
+
+    with col_base1:
+        st.metric("Linhas", df.shape[0])
+
+    with col_base2:
+        st.metric("Colunas", df.shape[1])
+
+    with col_base3:
+        st.metric("Colunas numéricas", len(colunas_numericas))
+
+    with col_base4:
+        st.metric("Modo", config.get("modo", "automatico").capitalize())
+
+    st.divider()
+
+    if coluna_categoria is None or coluna_valor is None:
+        st.warning("Ainda não foi possível identificar automaticamente as colunas principais.")
+        st.info("Vá até a página Dados e ajuste as colunas manualmente, se necessário.")
+        return
+
+    resultado = executar_insight_engine(
+        df,
+        coluna_categoria,
+        coluna_valor
+    )
+
+    if resultado is None:
+        st.warning("Não foi possível gerar insights com a planilha atual.")
+        return
+
+    df_agrupado = resultado["df_agrupado"]
+    metricas = resultado["metricas"]
+    insights = resultado["insights"]
+    recomendacoes = resultado["recomendacoes"]
+
+    st.subheader("Resumo executivo")
+
+    resumo = (
+        f"Foram analisadas **{metricas['quantidade_categorias']} categorias**, "
+        f"com total de **{formatar_numero(metricas['total'])}** em **{coluna_valor}**. "
+        f"A principal categoria é **{metricas['maior_categoria']}**, com "
+        f"**{formatar_numero(metricas['maior_valor'])}**, representando "
+        f"**{formatar_percentual(metricas['maior_participacao'])}** do total. "
+        f"As três maiores categorias concentram "
+        f"**{formatar_percentual(metricas['participacao_top_3'])}** do resultado."
+    )
+
+    st.info(resumo)
+
+    st.divider()
+
+    st.subheader("Indicadores principais")
+
+    col1, col2, col3, col4 = st.columns(4)
+
+    with col1:
+        st.metric(
+            "Total analisado",
+            formatar_numero(metricas["total"])
         )
 
-        if resultado is None:
-            st.warning("Não foi possível gerar insights com a planilha carregada.")
+    with col2:
+        st.metric(
+            "Categoria líder",
+            str(metricas["maior_categoria"]),
+            formatar_numero(metricas["maior_valor"])
+        )
 
-        else:
-            df_agrupado = resultado["df_agrupado"]
-            metricas = resultado["metricas"]
-            insights = resultado["insights"]
-            recomendacoes = resultado["recomendacoes"]
+    with col3:
+        st.metric(
+            "Concentração Top 3",
+            formatar_percentual(metricas["participacao_top_3"])
+        )
 
-            nivel_atencao, icone_atencao = classificar_nivel_atencao(metricas)
-            insight_score = calcular_insight_score(metricas)
+    with col4:
+        st.metric(
+            "Categorias",
+            metricas["quantidade_categorias"]
+        )
 
-            st.success(f"Arquivo analisado: {st.session_state.nome_arquivo}")
+    st.divider()
 
-            st.subheader("Resumo executivo")
+    col_esq, col_dir = st.columns([1.2, 1])
 
-            st.info(
-                gerar_texto_resumo_executivo(
-                    metricas,
-                    coluna_valor
-                )
-            )
+    with col_esq:
+        st.subheader("Principais categorias")
 
-            st.divider()
+        top_n = min(10, len(df_agrupado))
 
-            col1, col2, col3, col4 = st.columns(4)
+        df_top = df_agrupado.head(top_n).sort_values(
+            by=coluna_valor,
+            ascending=True
+        )
 
-            with col1:
-                st.metric(
-                    "Insight Score™",
-                    f"{insight_score}/100"
-                )
+        fig = px.bar(
+            df_top,
+            x=coluna_valor,
+            y=coluna_categoria,
+            orientation="h",
+            color="Classe ABC",
+            text=coluna_valor,
+            title=f"Top {top_n} por {coluna_valor}",
+            color_discrete_map={
+                "A": "#2563EB",
+                "B": "#F97316",
+                "C": "#94A3B8"
+            }
+        )
 
-            with col2:
-                st.metric(
-                    "Nível de atenção",
-                    f"{icone_atencao} {nivel_atencao}"
-                )
+        fig.update_traces(
+            texttemplate="%{text:,.2f}",
+            textposition="outside"
+        )
 
-            with col3:
-                st.metric(
-                    "Total analisado",
-                    formatar_numero(metricas["total"])
-                )
+        fig.update_layout(
+            height=500,
+            xaxis_title=coluna_valor,
+            yaxis_title=coluna_categoria
+        )
 
-            with col4:
-                st.metric(
-                    "Top 3",
-                    formatar_percentual(metricas["participacao_top_3"])
-                )
+        st.plotly_chart(fig, use_container_width=True)
 
-            st.divider()
+    with col_dir:
+        st.subheader("Mapa de participação")
 
-            col_esq, col_dir = st.columns([1.2, 1])
+        df_pizza = df_agrupado.head(min(8, len(df_agrupado)))
 
-            with col_esq:
-                st.subheader("Principais achados")
+        fig_pizza = px.pie(
+            df_pizza,
+            names=coluna_categoria,
+            values=coluna_valor,
+            title="Participação dos principais grupos"
+        )
 
-                for insight in insights[:4]:
-                    exibir_card_insight(insight)
+        fig_pizza.update_layout(height=500)
 
-            with col_dir:
-                st.subheader("Ranking rápido")
+        st.plotly_chart(fig_pizza, use_container_width=True)
 
-                df_top = df_agrupado.head(5).sort_values(
-                    by=coluna_valor,
-                    ascending=True
-                )
+    st.divider()
 
-                fig = px.bar(
-                    df_top,
-                    x=coluna_valor,
-                    y=coluna_categoria,
-                    orientation="h",
-                    text=coluna_valor,
-                    color="Classe ABC",
-                    title="Top 5 categorias",
-                    color_discrete_map={
-                        "A": "#2563EB",
-                        "B": "#F97316",
-                        "C": "#94A3B8"
-                    }
-                )
+    st.subheader("Alertas e descobertas")
 
-                fig.update_traces(
-                    texttemplate="%{text:,.2f}",
-                    textposition="outside"
-                )
+    if len(insights) == 0:
+        st.success("Nenhum alerta relevante encontrado nesta análise.")
+    else:
+        for insight in insights:
+            exibir_insight(insight)
 
-                fig.update_layout(
-                    height=420,
-                    xaxis_title=coluna_valor,
-                    yaxis_title=coluna_categoria
-                )
+    st.divider()
 
-                st.plotly_chart(fig, use_container_width=True)
+    st.subheader("Recomendações automáticas")
 
-            st.divider()
+    for i, recomendacao in enumerate(recomendacoes, start=1):
+        st.write(f"**{i}.** {recomendacao}")
 
-            st.subheader("Recomendações prioritárias")
+    st.divider()
 
-            for i, recomendacao in enumerate(recomendacoes[:5], start=1):
-                st.write(f"**{i}.** {recomendacao}")
+    st.subheader("Atalhos")
 
-            st.divider()
+    col_atalho1, col_atalho2, col_atalho3 = st.columns(3)
 
-            st.subheader("Resumo da classificação ABC")
+    with col_atalho1:
+        if st.button("Ver análise detalhada"):
+            st.switch_page("pages/Analises.py")
 
-            classes_abc = metricas["classes_abc"].copy()
-            classes_abc["Participacao"] = classes_abc["Participacao"].round(2)
+    with col_atalho2:
+        if st.button("Enviar nova planilha"):
+            st.switch_page("pages/Dados.py")
 
-            col_abc1, col_abc2 = st.columns([1, 1])
+    with col_atalho3:
+        if st.button("Abrir agente de IA"):
+            st.switch_page("pages/Agente.py")
 
-            with col_abc1:
-                st.dataframe(
-                    classes_abc,
-                    use_container_width=True
-                )
+    st.divider()
 
-            with col_abc2:
-                fig_abc = px.bar(
-                    classes_abc,
-                    x="Classe ABC",
-                    y="Participacao",
-                    text="Participacao",
-                    color="Classe ABC",
-                    title="Participação por classe ABC",
-                    color_discrete_map={
-                        "A": "#2563EB",
-                        "B": "#F97316",
-                        "C": "#94A3B8"
-                    }
-                )
+    with st.expander("Ver configuração usada nesta análise"):
+        st.write(f"**Coluna de categoria:** {coluna_categoria}")
+        st.write(f"**Coluna de valor principal:** {coluna_valor}")
+        st.write(f"**Coluna percentual:** {config.get('coluna_percentual')}")
+        st.write(f"**Coluna de data:** {config.get('coluna_data')}")
 
-                fig_abc.update_traces(
-                    texttemplate="%{text:.2f}%",
-                    textposition="outside"
-                )
 
-                fig_abc.update_layout(
-                    height=350,
-                    yaxis_title="Participação %",
-                    xaxis_title="Classe"
-                )
-
-                st.plotly_chart(fig_abc, use_container_width=True)
-
-            st.divider()
-
-            st.subheader("Próximos passos")
-
-            col_p1, col_p2, col_p3 = st.columns(3)
-
-            with col_p1:
-                st.info(
-                    """
-                    **Ver análise completa**  
-                    Acesse a página **Análises** para ver Pareto, outliers e ranking detalhado.
-                    """
-                )
-
-            with col_p2:
-                st.info(
-                    """
-                    **Trocar planilha**  
-                    Acesse a página **Dados** para enviar outro arquivo.
-                    """
-                )
-
-            with col_p3:
-                st.info(
-                    """
-                    **Próxima evolução**  
-                    Em breve: análise temporal, tendências e agente de IA.
-                    """
-                )
+if not st.session_state.dados_carregados:
+    exibir_estado_sem_dados()
+else:
+    df = obter_dados()
+    exibir_central_com_dados(df)
