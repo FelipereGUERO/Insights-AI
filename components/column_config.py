@@ -4,7 +4,7 @@ import pandas as pd
 
 def inicializar_configuracao_colunas():
     """
-    Inicializa a configuração das colunas no session_state.
+    Inicializa configuração das colunas.
     """
 
     if "configuracao_colunas" not in st.session_state:
@@ -19,7 +19,7 @@ def inicializar_configuracao_colunas():
 
 def obter_configuracao_colunas():
     """
-    Retorna a configuração atual das colunas.
+    Retorna configuração atual.
     """
 
     inicializar_configuracao_colunas()
@@ -28,7 +28,7 @@ def obter_configuracao_colunas():
 
 def tratar_nenhuma(valor):
     """
-    Converte opção Nenhuma em None.
+    Converte 'Nenhuma' em None.
     """
 
     if valor == "Nenhuma":
@@ -45,7 +45,7 @@ def salvar_configuracao_colunas(
     modo="manual"
 ):
     """
-    Salva a configuração das colunas.
+    Salva configuração escolhida pelo usuário.
     """
 
     st.session_state.configuracao_colunas = {
@@ -59,7 +59,7 @@ def salvar_configuracao_colunas(
 
 def criar_opcoes_colunas(df):
     """
-    Cria lista de opções para selectbox.
+    Cria lista para selectbox.
     """
 
     return ["Nenhuma"] + df.columns.tolist()
@@ -67,7 +67,7 @@ def criar_opcoes_colunas(df):
 
 def encontrar_indice_opcao(opcoes, valor):
     """
-    Encontra índice de uma opção.
+    Retorna índice seguro de uma opção.
     """
 
     if valor in opcoes:
@@ -76,72 +76,29 @@ def encontrar_indice_opcao(opcoes, valor):
     return 0
 
 
-def detectar_coluna_percentual(df):
-    """
-    Detecta coluna percentual.
-    """
-
-    colunas_numericas = df.select_dtypes(include="number").columns.tolist()
-
-    palavras_percentual = [
-        "%",
-        "percentual",
-        "participacao",
-        "participação",
-        "share",
-        "perc",
-        "representatividade"
-    ]
-
-    for coluna in df.columns:
-        nome = str(coluna).lower()
-
-        if any(palavra in nome for palavra in palavras_percentual):
-            if coluna in colunas_numericas:
-                return coluna
-
-    for coluna in colunas_numericas:
-        serie = df[coluna].dropna()
-
-        if len(serie) == 0:
-            continue
-
-        menor = serie.min()
-        maior = serie.max()
-        soma = serie.sum()
-
-        if menor >= 0 and maior <= 1.05 and 0.80 <= soma <= 1.20:
-            return coluna
-
-        if menor >= 0 and maior <= 100 and 80 <= soma <= 120:
-            return coluna
-
-    return None
-
-
 def detectar_coluna_data(df):
     """
     Detecta coluna de data.
     """
 
-    colunas_data = df.select_dtypes(
+    colunas_datetime = df.select_dtypes(
         include=["datetime", "datetimetz"]
     ).columns.tolist()
 
-    if len(colunas_data) > 0:
-        return colunas_data[0]
+    if len(colunas_datetime) > 0:
+        return colunas_datetime[0]
 
     palavras_data = [
         "data",
         "date",
         "dia",
-        "mes",
         "mês",
+        "mes",
         "month",
         "ano",
         "year",
-        "periodo",
-        "período"
+        "período",
+        "periodo"
     ]
 
     for coluna in df.columns:
@@ -153,25 +110,69 @@ def detectar_coluna_data(df):
     return None
 
 
-def detectar_coluna_categoria(df):
+def detectar_coluna_percentual(df):
     """
-    Detecta a melhor coluna de categoria.
+    Detecta coluna percentual.
     """
 
-    # Primeiro procura colunas de texto
+    colunas_numericas = df.select_dtypes(include="number").columns.tolist()
+
+    if len(colunas_numericas) == 0:
+        return None
+
+    palavras_percentual = [
+        "%",
+        "percentual",
+        "participacao",
+        "participação",
+        "share",
+        "perc",
+        "representatividade"
+    ]
+
+    # Primeiro tenta pelo nome
+    for coluna in colunas_numericas:
+        nome = str(coluna).lower()
+
+        if any(palavra in nome for palavra in palavras_percentual):
+            return coluna
+
+    # Depois tenta pelo comportamento dos dados
+    for coluna in colunas_numericas:
+        serie = df[coluna].dropna()
+
+        if len(serie) == 0:
+            continue
+
+        menor = serie.min()
+        maior = serie.max()
+        soma = serie.sum()
+
+        # Percentual decimal: 0 a 1, soma perto de 1
+        if menor >= 0 and maior <= 1.05 and 0.70 <= soma <= 1.30:
+            return coluna
+
+        # Percentual 0 a 100, soma perto de 100
+        if menor >= 0 and maior <= 100 and 70 <= soma <= 130:
+            return coluna
+
+    return None
+
+
+def detectar_coluna_categoria(df):
+    """
+    Detecta melhor coluna de categoria.
+    """
+
     colunas_texto = df.select_dtypes(
         include=["object", "string"]
     ).columns.tolist()
 
     if len(colunas_texto) == 0:
-        # Se não encontrar texto, usa a primeira coluna não numérica possível
-        if len(df.columns) > 0:
-            return df.columns[0]
         return None
 
     melhor_coluna = None
     melhor_pontuacao = -999
-
     total_linhas = max(len(df), 1)
 
     palavras_categoria = [
@@ -184,14 +185,16 @@ def detectar_coluna_categoria(df):
         "regiao",
         "região",
         "vendedor",
-        "area",
         "área",
+        "area",
         "linha",
         "grupo",
         "departamento",
+        "divisão",
+        "divisao",
         "nome",
-        "descricao",
-        "descrição"
+        "descrição",
+        "descricao"
     ]
 
     for coluna in colunas_texto:
@@ -200,15 +203,15 @@ def detectar_coluna_categoria(df):
         if len(serie) == 0:
             continue
 
+        nome = str(coluna).lower()
         valores_unicos = serie.nunique()
         taxa_unicidade = valores_unicos / total_linhas
         tamanho_medio = serie.str.len().mean()
-        nome = str(coluna).lower()
 
         pontuacao = 0
 
         if any(palavra in nome for palavra in palavras_categoria):
-            pontuacao += 6
+            pontuacao += 5
 
         if valores_unicos >= 2:
             pontuacao += 3
@@ -219,25 +222,23 @@ def detectar_coluna_categoria(df):
         if taxa_unicidade <= 0.70:
             pontuacao += 1
 
-        if tamanho_medio <= 50:
+        if tamanho_medio <= 60:
             pontuacao += 1
 
-        if tamanho_medio > 100:
-            pontuacao -= 3
+        # Evita colunas que parecem vazias ou genéricas demais
+        if valores_unicos <= 1:
+            pontuacao -= 5
 
         if pontuacao > melhor_pontuacao:
             melhor_pontuacao = pontuacao
             melhor_coluna = coluna
-
-    if melhor_coluna is None and len(colunas_texto) > 0:
-        melhor_coluna = colunas_texto[0]
 
     return melhor_coluna
 
 
 def detectar_coluna_valor(df, coluna_percentual=None):
     """
-    Detecta a principal coluna numérica.
+    Detecta coluna numérica principal.
     """
 
     colunas_numericas = df.select_dtypes(include="number").columns.tolist()
@@ -258,6 +259,7 @@ def detectar_coluna_valor(df, coluna_percentual=None):
         "quantidade",
         "qtd",
         "volume",
+        "saldo",
         "realizado",
         "resultado"
     ]
@@ -275,6 +277,7 @@ def detectar_coluna_valor(df, coluna_percentual=None):
             continue
 
         nome = str(coluna).lower()
+
         pontuacao = 0
 
         if any(palavra in nome for palavra in palavras_valor):
@@ -282,7 +285,8 @@ def detectar_coluna_valor(df, coluna_percentual=None):
 
         soma_abs = serie.abs().sum()
         media_abs = serie.abs().mean()
-        maior_abs = serie.abs().max()
+        max_abs = serie.abs().max()
+        valores_unicos = serie.nunique()
 
         if soma_abs > 0:
             pontuacao += 2
@@ -290,12 +294,15 @@ def detectar_coluna_valor(df, coluna_percentual=None):
         if media_abs > 1:
             pontuacao += 1
 
-        if maior_abs > 100:
+        if max_abs > 100:
             pontuacao += 3
 
-        # Penaliza colunas que parecem percentual
+        if valores_unicos >= 2:
+            pontuacao += 1
+
+        # Penaliza coluna com cara de percentual
         if serie.min() >= 0 and serie.max() <= 1.05:
-            pontuacao -= 5
+            pontuacao -= 4
 
         if serie.min() >= 0 and serie.max() <= 100:
             pontuacao -= 1
@@ -309,23 +316,21 @@ def detectar_coluna_valor(df, coluna_percentual=None):
             if coluna != coluna_percentual:
                 return coluna
 
-        return colunas_numericas[0]
-
     return melhor_coluna
 
 
 def detectar_configuracao_automatica(df):
     """
-    Detecta automaticamente as colunas principais.
+    Detecta automaticamente categoria, valor, percentual e data.
     """
 
+    coluna_data = detectar_coluna_data(df)
     coluna_percentual = detectar_coluna_percentual(df)
     coluna_categoria = detectar_coluna_categoria(df)
     coluna_valor = detectar_coluna_valor(
         df,
         coluna_percentual=coluna_percentual
     )
-    coluna_data = detectar_coluna_data(df)
 
     return {
         "coluna_categoria": coluna_categoria,
@@ -336,21 +341,40 @@ def detectar_configuracao_automatica(df):
     }
 
 
+def configuracao_valida(df, config):
+    """
+    Verifica se a configuração atual ainda existe na planilha.
+    """
+
+    if config is None:
+        return False
+
+    coluna_categoria = config.get("coluna_categoria")
+    coluna_valor = config.get("coluna_valor")
+
+    if coluna_categoria is None or coluna_valor is None:
+        return False
+
+    if coluna_categoria not in df.columns or coluna_valor not in df.columns:
+        return False
+
+    if not pd.api.types.is_numeric_dtype(df[coluna_valor]):
+        return False
+
+    return True
+
+
 def aplicar_configuracao_automatica(df, sobrescrever=True):
     """
-    Aplica e salva configuração automática.
+    Detecta e salva a configuração automática.
     """
 
     inicializar_configuracao_colunas()
 
     config_atual = obter_configuracao_colunas()
 
-    if not sobrescrever:
-        if (
-            config_atual.get("coluna_categoria") is not None
-            and config_atual.get("coluna_valor") is not None
-        ):
-            return config_atual
+    if not sobrescrever and configuracao_valida(df, config_atual):
+        return config_atual
 
     nova_config = detectar_configuracao_automatica(df)
 
