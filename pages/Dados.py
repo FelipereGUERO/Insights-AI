@@ -1,5 +1,7 @@
 import streamlit as st
 
+from components.style import carregar_css
+
 from components.data_store import (
     inicializar_estado_dados,
     salvar_dados_upload,
@@ -24,11 +26,14 @@ st.set_page_config(
 )
 
 
+carregar_css()
 inicializar_estado_dados()
 inicializar_configuracao_colunas()
 
 
 st.title("📁 Fontes de Dados")
+
+st.caption("Carregamento, leitura e identificação automática de planilhas.")
 
 st.write(
     """
