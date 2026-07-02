@@ -15,7 +15,8 @@ from components.column_config import (
 from components.insight_engine import (
     executar_insight_engine,
     formatar_numero,
-    formatar_percentual
+    formatar_percentual,
+    calcular_insight_score
 )
 
 
