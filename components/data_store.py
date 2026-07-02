@@ -25,14 +25,7 @@ def inicializar_estado_dados():
 
 def normalizar_texto_numero(valor):
     """
-    Converte textos com aparência numérica para um formato que o pandas entende.
-
-    Exemplos:
-    R$ 1.250,50 -> 1250.50
-    1.250,50    -> 1250.50
-    1250,50     -> 1250.50
-    1250.50     -> 1250.50
-    44,7%       -> 44.7
+    Converte textos com aparência numérica para formato numérico.
     """
 
     if pd.isna(valor):
@@ -48,11 +41,9 @@ def normalizar_texto_numero(valor):
     texto = texto.replace(" ", "")
     texto = texto.replace("\xa0", "")
 
-    # Remove parênteses de número negativo, exemplo: (1000) -> -1000
     if texto.startswith("(") and texto.endswith(")"):
         texto = "-" + texto[1:-1]
 
-    # Caso brasileiro: 1.250,50
     if "," in texto and "." in texto:
         if texto.rfind(",") > texto.rfind("."):
             texto = texto.replace(".", "")
@@ -60,7 +51,6 @@ def normalizar_texto_numero(valor):
         else:
             texto = texto.replace(",", "")
 
-    # Caso brasileiro simples: 1250,50
     elif "," in texto:
         texto = texto.replace(".", "")
         texto = texto.replace(",", ".")
@@ -71,7 +61,7 @@ def normalizar_texto_numero(valor):
 def tentar_converter_coluna_para_numero(serie):
     """
     Tenta converter uma coluna para número.
-    Só converte se a maior parte dos valores realmente parecer numérica.
+    Só converte se a maioria dos valores parecer numérica.
     """
 
     if pd.api.types.is_numeric_dtype(serie):
@@ -86,20 +76,50 @@ def tentar_converter_coluna_para_numero(serie):
         errors="coerce"
     )
 
-    total_valores_validos = serie_original.notna().sum()
+    total_validos = serie_original.notna().sum()
 
-    if total_valores_validos == 0:
+    if total_validos == 0:
         return serie_original
 
     total_convertidos = valores_convertidos.notna().sum()
 
-    taxa_conversao = total_convertidos / total_valores_validos
+    taxa_conversao = total_convertidos / total_validos
 
-    # Se pelo menos 70% da coluna parecer número, converte a coluna inteira
-    if taxa_conversao >= 0.7:
+    if taxa_conversao >= 0.70:
         return valores_convertidos
 
-    return serie_original
+    return serie_original.astype(str)
+
+
+def padronizar_nomes_colunas(df):
+    """
+    Padroniza nomes de colunas.
+    """
+
+    novas_colunas = []
+
+    for i, coluna in enumerate(df.columns):
+        nome = str(coluna).strip()
+
+        if nome == "" or nome.lower().startswith("unnamed") or nome.lower() == "nan":
+            nome = f"Coluna {i + 1}"
+
+        novas_colunas.append(nome)
+
+    df.columns = novas_colunas
+
+    return df
+
+
+def remover_linhas_vazias_e_totais_iniciais(df):
+    """
+    Remove linhas e colunas totalmente vazias.
+    """
+
+    df = df.dropna(how="all")
+    df = df.dropna(axis=1, how="all")
+
+    return df
 
 
 def padronizar_dataframe(df):
@@ -107,72 +127,47 @@ def padronizar_dataframe(df):
     Limpa e padroniza o DataFrame carregado.
     """
 
-    # Remove linhas e colunas totalmente vazias
-    df = df.dropna(how="all")
-    df = df.dropna(axis=1, how="all")
+    df = remover_linhas_vazias_e_totais_iniciais(df)
 
-    # Remove espaços dos nomes das colunas
-    df.columns = [str(col).strip() for col in df.columns]
+    df = padronizar_nomes_colunas(df)
 
-    # Renomeia colunas sem nome para facilitar leitura
-    novas_colunas = []
-
-    for i, coluna in enumerate(df.columns):
-        if coluna.startswith("Unnamed"):
-            novas_colunas.append(f"Coluna {i + 1}")
-        else:
-            novas_colunas.append(coluna)
-
-    df.columns = novas_colunas
-
-    # Tenta converter automaticamente colunas numéricas
     for coluna in df.columns:
         df[coluna] = tentar_converter_coluna_para_numero(df[coluna])
 
     return df
 
 
-def salvar_dados_upload(arquivo):
+def ler_arquivo_excel(arquivo):
     """
-    Lê o arquivo enviado pelo usuário e salva os dados no session_state.
-    Aceita arquivos Excel e CSV.
+    Lê arquivo Excel.
     """
 
-    nome_arquivo = arquivo.name.lower()
-
-    if nome_arquivo.endswith(".csv"):
-        df = pd.read_csv(arquivo)
-
-    elif nome_arquivo.endswith(".xlsx") or nome_arquivo.endswith(".xls"):
-        df = pd.read_excel(arquivo)
-
-    else:
-        raise ValueError("Formato de arquivo não suportado. Envie Excel ou CSV.")
-
-    df = padronizar_dataframe(df)
-
-    st.session_state.df_dados = df
-    st.session_state.nome_arquivo = arquivo.name
-    st.session_state.data_upload = datetime.now().strftime("%d/%m/%Y %H:%M")
-    st.session_state.dados_carregados = True
+    df = pd.read_excel(arquivo)
 
     return df
 
 
-def obter_dados():
+def ler_arquivo_csv(arquivo):
     """
-    Retorna o DataFrame salvo na sessão.
-    """
-
-    return st.session_state.df_dados
-
-
-def limpar_dados():
-    """
-    Remove os dados carregados da sessão.
+    Lê arquivo CSV com tentativa de separadores comuns.
     """
 
-    st.session_state.df_dados = None
-    st.session_state.nome_arquivo = None
-    st.session_state.data_upload = None
-    st.session_state.dados_carregados = False
+    try:
+        df = pd.read_csv(arquivo)
+        return df
+
+    except Exception:
+        arquivo.seek(0)
+        df = pd.read_csv(arquivo, sep=";")
+        return df
+
+
+def salvar_dados_upload(arquivo):
+    """
+    Lê o arquivo enviado pelo usuário e salva os dados no session_state.
+    Aceita Excel e CSV.
+    """
+
+    nome_arquivo = arquivo.name.lower()
+
+    if
