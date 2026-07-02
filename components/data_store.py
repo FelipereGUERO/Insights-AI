@@ -6,8 +6,7 @@ from datetime import datetime
 
 def inicializar_estado_dados():
     """
-    Inicializa as variáveis usadas para guardar os dados da planilha
-    durante a sessão do usuário.
+    Inicializa as variáveis de sessão usadas para armazenar a planilha carregada.
     """
 
     if "dados_carregados" not in st.session_state:
@@ -25,7 +24,12 @@ def inicializar_estado_dados():
 
 def normalizar_texto_numero(valor):
     """
-    Converte textos com aparência numérica para formato numérico.
+    Converte valores em texto com aparência numérica para formato numérico.
+    Exemplos:
+    R$ 1.250,50 -> 1250.50
+    1.250,50 -> 1250.50
+    44,7% -> 44.7
+    1140095.66 -> 1140095.66
     """
 
     if pd.isna(valor):
@@ -44,6 +48,7 @@ def normalizar_texto_numero(valor):
     if texto.startswith("(") and texto.endswith(")"):
         texto = "-" + texto[1:-1]
 
+    # Caso brasileiro: 1.250,50
     if "," in texto and "." in texto:
         if texto.rfind(",") > texto.rfind("."):
             texto = texto.replace(".", "")
@@ -51,6 +56,7 @@ def normalizar_texto_numero(valor):
         else:
             texto = texto.replace(",", "")
 
+    # Caso brasileiro simples: 1250,50
     elif "," in texto:
         texto = texto.replace(".", "")
         texto = texto.replace(",", ".")
@@ -61,7 +67,7 @@ def normalizar_texto_numero(valor):
 def tentar_converter_coluna_para_numero(serie):
     """
     Tenta converter uma coluna para número.
-    Só converte se a maioria dos valores parecer numérica.
+    Só converte se a maior parte dos valores parecer numérica.
     """
 
     if pd.api.types.is_numeric_dtype(serie):
@@ -82,92 +88,118 @@ def tentar_converter_coluna_para_numero(serie):
         return serie_original
 
     total_convertidos = valores_convertidos.notna().sum()
-
     taxa_conversao = total_convertidos / total_validos
 
-    if taxa_conversao >= 0.70:
+    # Se pelo menos 70% da coluna parece número, converte
+    if taxa_conversao >= 0.7:
         return valores_convertidos
 
     return serie_original.astype(str)
 
 
-def padronizar_nomes_colunas(df):
+def padronizar_dataframe(df):
     """
-    Padroniza nomes de colunas.
+    Padroniza a base carregada:
+    - remove linhas/colunas vazias;
+    - ajusta nomes de colunas;
+    - converte números em texto para número;
+    - mantém categorias como texto.
     """
 
+    df = df.copy()
+
+    # Remove linhas e colunas totalmente vazias
+    df = df.dropna(how="all")
+    df = df.dropna(axis=1, how="all")
+
+    # Se a planilha veio totalmente vazia
+    if df.empty:
+        return df
+
+    # Padroniza nomes de colunas
     novas_colunas = []
 
     for i, coluna in enumerate(df.columns):
         nome = str(coluna).strip()
 
-        if nome == "" or nome.lower().startswith("unnamed") or nome.lower() == "nan":
+        if nome == "" or nome.lower().startswith("unnamed"):
             nome = f"Coluna {i + 1}"
 
         novas_colunas.append(nome)
 
     df.columns = novas_colunas
 
-    return df
+    # Remove espaços extras em textos
+    for coluna in df.columns:
+        if df[coluna].dtype == "object":
+            df[coluna] = df[coluna].apply(
+                lambda x: str(x).strip() if pd.notna(x) else x
+            )
 
-
-def remover_linhas_vazias_e_totais_iniciais(df):
-    """
-    Remove linhas e colunas totalmente vazias.
-    """
-
-    df = df.dropna(how="all")
-    df = df.dropna(axis=1, how="all")
-
-    return df
-
-
-def padronizar_dataframe(df):
-    """
-    Limpa e padroniza o DataFrame carregado.
-    """
-
-    df = remover_linhas_vazias_e_totais_iniciais(df)
-
-    df = padronizar_nomes_colunas(df)
-
+    # Tenta converter colunas numéricas
     for coluna in df.columns:
         df[coluna] = tentar_converter_coluna_para_numero(df[coluna])
 
     return df
 
 
-def ler_arquivo_excel(arquivo):
+def salvar_dados_upload(arquivo):
     """
-    Lê arquivo Excel.
+    Lê Excel ou CSV e salva a base no estado da sessão.
     """
 
-    df = pd.read_excel(arquivo)
+    inicializar_estado_dados()
+
+    nome_arquivo = arquivo.name.lower()
+
+    if nome_arquivo.endswith(".csv"):
+        try:
+            df = pd.read_csv(arquivo)
+        except Exception:
+            arquivo.seek(0)
+            df = pd.read_csv(arquivo, sep=";")
+
+    elif nome_arquivo.endswith(".xlsx") or nome_arquivo.endswith(".xls"):
+        df = pd.read_excel(arquivo)
+
+    else:
+        raise ValueError("Formato de arquivo não suportado. Envie Excel ou CSV.")
+
+    df = padronizar_dataframe(df)
+
+    if df.empty:
+        raise ValueError("A planilha está vazia ou não possui dados válidos.")
+
+    st.session_state.df_dados = df
+    st.session_state.nome_arquivo = arquivo.name
+    st.session_state.data_upload = datetime.now().strftime("%d/%m/%Y %H:%M")
+    st.session_state.dados_carregados = True
+
+    # Sempre que sobe novo arquivo, limpa configuração antiga
+    if "configuracao_colunas" in st.session_state:
+        del st.session_state.configuracao_colunas
 
     return df
 
 
-def ler_arquivo_csv(arquivo):
+def obter_dados():
     """
-    Lê arquivo CSV com tentativa de separadores comuns.
-    """
-
-    try:
-        df = pd.read_csv(arquivo)
-        return df
-
-    except Exception:
-        arquivo.seek(0)
-        df = pd.read_csv(arquivo, sep=";")
-        return df
-
-
-def salvar_dados_upload(arquivo):
-    """
-    Lê o arquivo enviado pelo usuário e salva os dados no session_state.
-    Aceita Excel e CSV.
+    Retorna o DataFrame salvo.
     """
 
-    nome_arquivo = arquivo.name.lower()
+    inicializar_estado_dados()
+    return st.session_state.df_dados
 
-    if
+
+def limpar_dados():
+    """
+    Limpa os dados carregados.
+    """
+
+    st.session_state.df_dados = None
+    st.session_state.nome_arquivo = None
+    st.session_state.data_upload = None
+    st.session_state.dados_carregados = False
+
+    if "configuracao_colunas" in st.session_state:
+        del st.session_state.configuracao_colunas
