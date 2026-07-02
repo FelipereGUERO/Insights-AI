@@ -4,32 +4,32 @@ import numpy as np
 
 def formatar_numero(valor):
     """
-    Formata números no padrão brasileiro.
+    Formata número no padrão brasileiro.
     """
 
     try:
         return f"{valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
     except Exception:
-        return valor
+        return str(valor)
 
 
 def formatar_percentual(valor):
     """
-    Formata percentual no padrão brasileiro.
+    Formata percentual.
     """
 
     try:
         return f"{valor:.2f}%".replace(".", ",")
     except Exception:
-        return valor
+        return str(valor)
 
 
 def remover_linhas_totais(df, coluna_categoria):
     """
-    Remove linhas de totalização que normalmente vêm de tabelas dinâmicas.
+    Remove linhas de totalização.
     """
 
-    if coluna_categoria is None:
+    if coluna_categoria is None or coluna_categoria not in df.columns:
         return df
 
     termos_total = [
@@ -43,28 +43,40 @@ def remover_linhas_totais(df, coluna_categoria):
 
     df_temp = df.copy()
 
-    coluna_texto = (
+    texto = (
         df_temp[coluna_categoria]
         .astype(str)
         .str.strip()
         .str.lower()
     )
 
-    mascara_total = coluna_texto.isin(termos_total)
+    mascara_total = texto.isin(termos_total)
 
     return df_temp[~mascara_total]
 
 
+def classificar_abc(participacao_acumulada):
+    """
+    Classificação ABC:
+    A até 80%, B até 95%, C acima de 95%.
+    """
+
+    if participacao_acumulada <= 80:
+        return "A"
+
+    if participacao_acumulada <= 95:
+        return "B"
+
+    return "C"
+
+
 def preparar_base_analise(df, coluna_categoria, coluna_valor):
     """
-    Prepara a base principal da análise:
-    - remove totais;
-    - remove vazios;
-    - agrupa por categoria;
-    - calcula participação;
-    - calcula participação acumulada;
-    - classifica ABC.
+    Prepara base agregada da análise.
     """
+
+    if df is None or df.empty:
+        return None
 
     if coluna_categoria is None or coluna_valor is None:
         return None
@@ -72,20 +84,35 @@ def preparar_base_analise(df, coluna_categoria, coluna_valor):
     if coluna_categoria not in df.columns or coluna_valor not in df.columns:
         return None
 
-    df_analise = remover_linhas_totais(df, coluna_categoria)
+    if not pd.api.types.is_numeric_dtype(df[coluna_valor]):
+        return None
 
-    df_analise = df_analise[[coluna_categoria, coluna_valor]].dropna()
+    df_temp = remover_linhas_totais(df, coluna_categoria)
 
-    if df_analise.empty:
+    df_temp = df_temp[[coluna_categoria, coluna_valor]].copy()
+
+    df_temp = df_temp.dropna(subset=[coluna_categoria, coluna_valor])
+
+    if df_temp.empty:
+        return None
+
+    df_temp[coluna_categoria] = df_temp[coluna_categoria].astype(str).str.strip()
+
+    df_temp = df_temp[df_temp[coluna_categoria] != ""]
+
+    if df_temp.empty:
         return None
 
     df_agrupado = (
-        df_analise
+        df_temp
         .groupby(coluna_categoria, as_index=False)[coluna_valor]
         .sum()
         .sort_values(by=coluna_valor, ascending=False)
         .reset_index(drop=True)
     )
+
+    if df_agrupado.empty:
+        return None
 
     total = df_agrupado[coluna_valor].sum()
 
@@ -110,49 +137,32 @@ def preparar_base_analise(df, coluna_categoria, coluna_valor):
     return df_agrupado
 
 
-def classificar_abc(participacao_acumulada):
-    """
-    Classificação ABC:
-    A: até 80%
-    B: de 80% até 95%
-    C: acima de 95%
-    """
-
-    if participacao_acumulada <= 80:
-        return "A"
-    elif participacao_acumulada <= 95:
-        return "B"
-    else:
-        return "C"
-
-
 def calcular_outliers(df_agrupado, coluna_valor):
     """
-    Detecta valores muito acima ou abaixo usando IQR.
+    Calcula outliers usando IQR.
     """
 
+    resultado_vazio = {
+        "outliers_superiores": pd.DataFrame(),
+        "outliers_inferiores": pd.DataFrame(),
+        "limite_superior": None,
+        "limite_inferior": None
+    }
+
     if df_agrupado is None or df_agrupado.empty:
-        return {
-            "outliers_superiores": pd.DataFrame(),
-            "outliers_inferiores": pd.DataFrame(),
-            "limite_superior": None,
-            "limite_inferior": None
-        }
+        return resultado_vazio
 
     valores = df_agrupado[coluna_valor].dropna()
 
     if len(valores) < 4:
-        return {
-            "outliers_superiores": pd.DataFrame(),
-            "outliers_inferiores": pd.DataFrame(),
-            "limite_superior": None,
-            "limite_inferior": None
-        }
+        return resultado_vazio
 
     q1 = valores.quantile(0.25)
     q3 = valores.quantile(0.75)
-
     iqr = q3 - q1
+
+    if iqr == 0:
+        return resultado_vazio
 
     limite_inferior = q1 - 1.5 * iqr
     limite_superior = q3 + 1.5 * iqr
@@ -175,7 +185,7 @@ def calcular_outliers(df_agrupado, coluna_valor):
 
 def calcular_metricas_avancadas(df_agrupado, coluna_categoria, coluna_valor):
     """
-    Calcula métricas analíticas avançadas.
+    Calcula métricas principais.
     """
 
     if df_agrupado is None or df_agrupado.empty:
@@ -236,7 +246,7 @@ def calcular_metricas_avancadas(df_agrupado, coluna_categoria, coluna_valor):
 
     outliers = calcular_outliers(df_agrupado, coluna_valor)
 
-    metricas = {
+    return {
         "total": total,
         "quantidade_categorias": quantidade_categorias,
         "maior_categoria": maior_categoria,
@@ -257,25 +267,24 @@ def calcular_metricas_avancadas(df_agrupado, coluna_categoria, coluna_valor):
         "outliers": outliers
     }
 
-    return metricas
-
 
 def avaliar_concentracao(participacao_top_3):
     """
-    Avalia o nível de concentração do resultado.
+    Avalia concentração.
     """
 
     if participacao_top_3 >= 80:
         return "Alta"
-    elif participacao_top_3 >= 60:
+
+    if participacao_top_3 >= 60:
         return "Média"
-    else:
-        return "Baixa"
+
+    return "Baixa"
 
 
 def gerar_insights_avancados(df_agrupado, metricas, coluna_categoria, coluna_valor):
     """
-    Gera textos analíticos automáticos.
+    Gera insights automáticos.
     """
 
     if metricas is None:
@@ -326,21 +335,21 @@ def gerar_insights_avancados(df_agrupado, metricas, coluna_categoria, coluna_val
 
     if concentracao == "Alta":
         nivel = "warning"
-        texto_concentracao = (
+        texto = (
             f"As 3 maiores categorias concentram "
             f"{formatar_percentual(metricas['participacao_top_3'])} do total. "
-            f"Isso indica alta dependência de poucos grupos e pode representar risco."
+            f"Isso indica alta dependência de poucos grupos."
         )
     elif concentracao == "Média":
         nivel = "info"
-        texto_concentracao = (
+        texto = (
             f"As 3 maiores categorias concentram "
             f"{formatar_percentual(metricas['participacao_top_3'])} do total. "
             f"A concentração é moderada e deve ser acompanhada."
         )
     else:
         nivel = "success"
-        texto_concentracao = (
+        texto = (
             f"As 3 maiores categorias concentram "
             f"{formatar_percentual(metricas['participacao_top_3'])} do total. "
             f"O resultado está relativamente distribuído."
@@ -351,7 +360,7 @@ def gerar_insights_avancados(df_agrupado, metricas, coluna_categoria, coluna_val
             "tipo": "Concentração",
             "nivel": nivel,
             "titulo": f"Concentração {concentracao}",
-            "texto": texto_concentracao
+            "texto": texto
         }
     )
 
@@ -371,7 +380,7 @@ def gerar_insights_avancados(df_agrupado, metricas, coluna_categoria, coluna_val
                 "texto": (
                     f"A Classe A possui {qtd_a} categoria(s), que juntas representam "
                     f"{formatar_percentual(part_a)} do total. "
-                    f"Essas categorias devem receber prioridade na análise gerencial."
+                    f"Essas categorias devem receber prioridade gerencial."
                 )
             }
         )
@@ -379,7 +388,7 @@ def gerar_insights_avancados(df_agrupado, metricas, coluna_categoria, coluna_val
     outliers_superiores = metricas["outliers"]["outliers_superiores"]
 
     if not outliers_superiores.empty:
-        lista_outliers = ", ".join(
+        lista = ", ".join(
             outliers_superiores[coluna_categoria].astype(str).head(3).tolist()
         )
 
@@ -390,7 +399,7 @@ def gerar_insights_avancados(df_agrupado, metricas, coluna_categoria, coluna_val
                 "titulo": "Valores fora do padrão",
                 "texto": (
                     f"Foram identificadas categorias com valores muito acima do padrão: "
-                    f"{lista_outliers}. Elas devem ser analisadas separadamente."
+                    f"{lista}."
                 )
             }
         )
@@ -404,8 +413,7 @@ def gerar_insights_avancados(df_agrupado, metricas, coluna_categoria, coluna_val
                 "texto": (
                     f"A categoria {metricas['menor_categoria']} possui apenas "
                     f"{formatar_percentual(metricas['menor_participacao'])} "
-                    f"de participação. Pode ser uma oportunidade, uma linha pouco explorada "
-                    f"ou um ponto de baixa performance."
+                    f"de participação."
                 )
             }
         )
@@ -415,7 +423,7 @@ def gerar_insights_avancados(df_agrupado, metricas, coluna_categoria, coluna_val
 
 def gerar_recomendacoes(metricas):
     """
-    Gera recomendações automáticas com base nos indicadores.
+    Gera recomendações automáticas.
     """
 
     if metricas is None:
@@ -431,7 +439,7 @@ def gerar_recomendacoes(metricas):
         )
 
         recomendacoes.append(
-            "Criar acompanhamento recorrente das categorias líderes, pois qualquer queda nelas pode impactar fortemente o total."
+            "Acompanhar de perto as categorias líderes, pois qualquer queda nelas pode impactar fortemente o total."
         )
 
     if metricas["maior_participacao"] >= 40:
@@ -446,7 +454,7 @@ def gerar_recomendacoes(metricas):
 
     if not metricas["outliers"]["outliers_superiores"].empty:
         recomendacoes.append(
-            "Validar os valores muito acima do padrão para confirmar se representam uma oportunidade, sazonalidade ou possível distorção nos dados."
+            "Validar valores muito acima do padrão para confirmar se representam oportunidade, sazonalidade ou distorção nos dados."
         )
 
     if len(recomendacoes) == 0:
@@ -477,6 +485,9 @@ def executar_insight_engine(df, coluna_categoria, coluna_valor):
         coluna_valor
     )
 
+    if metricas is None:
+        return None
+
     insights = gerar_insights_avancados(
         df_agrupado,
         metricas,
@@ -486,148 +497,9 @@ def executar_insight_engine(df, coluna_categoria, coluna_valor):
 
     recomendacoes = gerar_recomendacoes(metricas)
 
-    resultado = {
+    return {
         "df_agrupado": df_agrupado,
         "metricas": metricas,
         "insights": insights,
         "recomendacoes": recomendacoes
     }
-
-def calcular_insight_score(metricas):
-    """
-    Calcula uma nota executiva da análise com base em concentração,
-    dependência, outliers e distribuição dos resultados.
-
-    A nota vai de 0 a 100.
-    """
-
-    if metricas is None:
-        return {
-            "score": 0,
-            "nivel": "Indisponível",
-            "descricao": "Não foi possível calcular o Insight Score.",
-            "fatores_positivos": [],
-            "fatores_atencao": []
-        }
-
-    score = 100
-
-    fatores_positivos = []
-    fatores_atencao = []
-
-    participacao_top_3 = metricas.get("participacao_top_3", 0)
-    maior_participacao = metricas.get("maior_participacao", 0)
-    quantidade_categorias = metricas.get("quantidade_categorias", 0)
-
-    outliers_superiores = metricas["outliers"]["outliers_superiores"]
-    outliers_inferiores = metricas["outliers"]["outliers_inferiores"]
-
-    quantidade_outliers = len(outliers_superiores) + len(outliers_inferiores)
-
-    # Avaliação de concentração Top 3
-    if participacao_top_3 >= 85:
-        score -= 25
-        fatores_atencao.append(
-            "As 3 maiores categorias concentram uma parcela muito alta do resultado."
-        )
-    elif participacao_top_3 >= 70:
-        score -= 15
-        fatores_atencao.append(
-            "Existe concentração relevante nas 3 maiores categorias."
-        )
-    elif participacao_top_3 >= 55:
-        score -= 8
-        fatores_atencao.append(
-            "A concentração nas principais categorias deve ser acompanhada."
-        )
-    else:
-        score += 3
-        fatores_positivos.append(
-            "O resultado está relativamente bem distribuído entre as categorias."
-        )
-
-    # Avaliação da categoria líder
-    if maior_participacao >= 50:
-        score -= 20
-        fatores_atencao.append(
-            "A categoria líder representa mais da metade do total analisado."
-        )
-    elif maior_participacao >= 40:
-        score -= 12
-        fatores_atencao.append(
-            "A categoria líder tem peso muito relevante no resultado."
-        )
-    elif maior_participacao >= 30:
-        score -= 5
-        fatores_atencao.append(
-            "A categoria líder possui participação significativa."
-        )
-    else:
-        score += 3
-        fatores_positivos.append(
-            "Nenhuma categoria individual domina excessivamente o resultado."
-        )
-
-    # Avaliação de outliers
-    if quantidade_outliers >= 3:
-        score -= 15
-        fatores_atencao.append(
-            "Foram encontrados vários valores fora do padrão."
-        )
-    elif quantidade_outliers > 0:
-        score -= 8
-        fatores_atencao.append(
-            "Foram encontrados possíveis valores fora do padrão."
-        )
-    else:
-        score += 5
-        fatores_positivos.append(
-            "Não foram encontrados outliers relevantes."
-        )
-
-    # Avaliação da quantidade de categorias
-    if quantidade_categorias <= 2:
-        score -= 10
-        fatores_atencao.append(
-            "A análise possui poucas categorias, o que limita a leitura gerencial."
-        )
-    elif quantidade_categorias >= 5:
-        score += 2
-        fatores_positivos.append(
-            "A base possui boa quantidade de categorias para comparação."
-        )
-
-    # Avaliação da menor participação
-    menor_participacao = metricas.get("menor_participacao", 0)
-
-    if menor_participacao < 0.5:
-        score -= 5
-        fatores_atencao.append(
-            "Existem categorias com participação muito baixa."
-        )
-
-    # Garante limite entre 0 e 100
-    score = max(0, min(100, round(score)))
-
-    if score >= 85:
-        nivel = "Excelente"
-        descricao = "A análise apresenta boa distribuição, poucos riscos aparentes e indicadores saudáveis."
-    elif score >= 70:
-        nivel = "Bom"
-        descricao = "A análise está positiva, mas existem pontos que merecem acompanhamento."
-    elif score >= 50:
-        nivel = "Atenção"
-        descricao = "A análise apresenta sinais relevantes de concentração, dependência ou distorções."
-    else:
-        nivel = "Crítico"
-        descricao = "A análise indica riscos importantes e deve ser investigada com prioridade."
-
-    return {
-        "score": score,
-        "nivel": nivel,
-        "descricao": descricao,
-        "fatores_positivos": fatores_positivos,
-        "fatores_atencao": fatores_atencao
-    }
-
-    return resultado
