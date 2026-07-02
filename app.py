@@ -50,9 +50,36 @@ def identificar_colunas(df):
     return colunas_texto, colunas_numericas
 
 
+def garantir_configuracao_valida(df):
+    """
+    Garante que categoria e valor existem e são válidos.
+    """
+
+    config = obter_configuracao_colunas()
+
+    coluna_categoria = config.get("coluna_categoria")
+    coluna_valor = config.get("coluna_valor")
+
+    precisa_recalcular = False
+
+    if coluna_categoria is None or coluna_valor is None:
+        precisa_recalcular = True
+
+    elif coluna_categoria not in df.columns or coluna_valor not in df.columns:
+        precisa_recalcular = True
+
+    elif coluna_valor not in df.select_dtypes(include="number").columns.tolist():
+        precisa_recalcular = True
+
+    if precisa_recalcular:
+        config = aplicar_configuracao_automatica(df, sobrescrever=True)
+
+    return config
+
+
 def exibir_insight(insight):
     """
-    Exibe um insight com visual conforme o nível.
+    Exibe insight com visual conforme o nível.
     """
 
     texto = f"**{insight['titulo']}**  \n{insight['texto']}"
@@ -69,7 +96,7 @@ def exibir_insight(insight):
 
 def exibir_estado_sem_dados():
     """
-    Tela exibida quando nenhuma planilha foi carregada.
+    Tela sem planilha carregada.
     """
 
     st.title("🧠 Insight AI")
@@ -139,57 +166,29 @@ def exibir_estado_sem_dados():
             """
         )
 
-    st.divider()
-
-    st.subheader("O que o MVP já consegue analisar")
-
-    col_a, col_b = st.columns(2)
-
-    with col_a:
-        st.write(
-            """
-            - Ranking por categoria;
-            - Total analisado;
-            - Participação percentual;
-            - Curva ABC;
-            - Pareto;
-            - Concentração Top 3;
-            """
-        )
-
-    with col_b:
-        st.write(
-            """
-            - Outliers;
-            - Recomendações automáticas;
-            - Resumo executivo;
-            - Identificação automática de colunas;
-            - Gráficos analíticos;
-            - Mapa de participação.
-            """
-        )
-
 
 def exibir_central_com_dados(df):
     """
-    Tela principal quando já existe uma planilha carregada.
+    Tela principal com planilha carregada.
     """
-
-    config = obter_configuracao_colunas()
-
-    if config.get("coluna_categoria") is None or config.get("coluna_valor") is None:
-        config = aplicar_configuracao_automatica(df, sobrescrever=True)
-
-    coluna_categoria = config.get("coluna_categoria")
-    coluna_valor = config.get("coluna_valor")
-
-    colunas_texto, colunas_numericas = identificar_colunas(df)
 
     st.title("🧠 Central de Insights")
 
     st.caption("Resumo executivo automático da análise carregada.")
 
     st.divider()
+
+    if df is None or df.empty:
+        st.warning("A planilha carregada está vazia.")
+        st.info("Vá até a página Dados e envie uma nova planilha.")
+        return
+
+    config = garantir_configuracao_valida(df)
+
+    coluna_categoria = config.get("coluna_categoria")
+    coluna_valor = config.get("coluna_valor")
+
+    colunas_texto, colunas_numericas = identificar_colunas(df)
 
     st.success(f"Arquivo atual: {st.session_state.nome_arquivo}")
 
@@ -212,6 +211,14 @@ def exibir_central_com_dados(df):
     if coluna_categoria is None or coluna_valor is None:
         st.warning("Ainda não foi possível identificar automaticamente as colunas principais.")
         st.info("Vá até a página Dados e ajuste as colunas manualmente, se necessário.")
+
+        with st.expander("Diagnóstico da planilha"):
+            st.write("Colunas encontradas:")
+            st.write(df.columns.tolist())
+
+            st.write("Tipos das colunas:")
+            st.write(df.dtypes.astype(str).to_dict())
+
         return
 
     resultado = executar_insight_engine(
@@ -222,6 +229,26 @@ def exibir_central_com_dados(df):
 
     if resultado is None:
         st.warning("Não foi possível gerar insights com a planilha atual.")
+        st.info(
+            """
+            A planilha precisa ter pelo menos uma coluna de categoria e uma coluna numérica.
+            Tente limpar os dados carregados e enviar a planilha novamente.
+            """
+        )
+
+        with st.expander("Diagnóstico da análise"):
+            st.write(f"Coluna de categoria detectada: {coluna_categoria}")
+            st.write(f"Coluna de valor detectada: {coluna_valor}")
+
+            st.write("Colunas disponíveis:")
+            st.write(df.columns.tolist())
+
+            st.write("Tipos das colunas:")
+            st.write(df.dtypes.astype(str).to_dict())
+
+            st.write("Prévia dos dados:")
+            st.dataframe(df.head(20), use_container_width=True)
+
         return
 
     df_agrupado = resultado["df_agrupado"]
@@ -357,29 +384,14 @@ def exibir_central_com_dados(df):
 
     st.divider()
 
-    st.subheader("Atalhos")
-
-    col_atalho1, col_atalho2, col_atalho3 = st.columns(3)
-
-    with col_atalho1:
-        if st.button("Ver análise detalhada"):
-            st.switch_page("pages/Analises.py")
-
-    with col_atalho2:
-        if st.button("Enviar nova planilha"):
-            st.switch_page("pages/Dados.py")
-
-    with col_atalho3:
-        if st.button("Abrir agente de IA"):
-            st.switch_page("pages/Agente.py")
-
-    st.divider()
-
     with st.expander("Ver configuração usada nesta análise"):
         st.write(f"**Coluna de categoria:** {coluna_categoria}")
         st.write(f"**Coluna de valor principal:** {coluna_valor}")
         st.write(f"**Coluna percentual:** {config.get('coluna_percentual')}")
         st.write(f"**Coluna de data:** {config.get('coluna_data')}")
+
+    with st.expander("Prévia dos dados analisados"):
+        st.dataframe(df.head(30), use_container_width=True)
 
 
 if not st.session_state.dados_carregados:
