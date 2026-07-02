@@ -1,6 +1,8 @@
 import streamlit as st
 import plotly.express as px
 
+from components.style import carregar_css
+
 from components.data_store import (
     inicializar_estado_dados,
     obter_dados
@@ -15,8 +17,7 @@ from components.column_config import (
 from components.insight_engine import (
     executar_insight_engine,
     formatar_numero,
-    formatar_percentual,
-    calcular_insight_score
+    formatar_percentual
 )
 
 
@@ -28,6 +29,7 @@ st.set_page_config(
 )
 
 
+carregar_css()
 inicializar_estado_dados()
 inicializar_configuracao_colunas()
 
@@ -82,7 +84,7 @@ def exibir_estado_sem_dados():
         """
         Bem-vindo ao **Insight AI**.
 
-        Esta será a tela principal do sistema. Aqui o usuário verá primeiro os principais
+        Esta é a tela principal do sistema. Aqui o usuário verá primeiro os principais
         achados da análise, antes mesmo de olhar gráficos ou tabelas.
         """
     )
@@ -141,19 +143,31 @@ def exibir_estado_sem_dados():
 
     st.subheader("O que o MVP já consegue analisar")
 
-    st.write(
-        """
-        - Ranking por categoria;
-        - Total analisado;
-        - Participação percentual;
-        - Curva ABC;
-        - Pareto;
-        - Concentração Top 3;
-        - Outliers;
-        - Recomendações automáticas;
-        - Resumo executivo.
-        """
-    )
+    col_a, col_b = st.columns(2)
+
+    with col_a:
+        st.write(
+            """
+            - Ranking por categoria;
+            - Total analisado;
+            - Participação percentual;
+            - Curva ABC;
+            - Pareto;
+            - Concentração Top 3;
+            """
+        )
+
+    with col_b:
+        st.write(
+            """
+            - Outliers;
+            - Recomendações automáticas;
+            - Resumo executivo;
+            - Identificação automática de colunas;
+            - Gráficos analíticos;
+            - Mapa de participação.
+            """
+        )
 
 
 def exibir_central_com_dados(df):
@@ -297,7 +311,9 @@ def exibir_central_com_dados(df):
         fig.update_layout(
             height=500,
             xaxis_title=coluna_valor,
-            yaxis_title=coluna_categoria
+            yaxis_title=coluna_categoria,
+            plot_bgcolor="#FFFFFF",
+            paper_bgcolor="#FFFFFF"
         )
 
         st.plotly_chart(fig, use_container_width=True)
@@ -314,7 +330,11 @@ def exibir_central_com_dados(df):
             title="Participação dos principais grupos"
         )
 
-        fig_pizza.update_layout(height=500)
+        fig_pizza.update_layout(
+            height=500,
+            paper_bgcolor="#FFFFFF",
+            plot_bgcolor="#FFFFFF"
+        )
 
         st.plotly_chart(fig_pizza, use_container_width=True)
 
