@@ -493,4 +493,141 @@ def executar_insight_engine(df, coluna_categoria, coluna_valor):
         "recomendacoes": recomendacoes
     }
 
+def calcular_insight_score(metricas):
+    """
+    Calcula uma nota executiva da análise com base em concentração,
+    dependência, outliers e distribuição dos resultados.
+
+    A nota vai de 0 a 100.
+    """
+
+    if metricas is None:
+        return {
+            "score": 0,
+            "nivel": "Indisponível",
+            "descricao": "Não foi possível calcular o Insight Score.",
+            "fatores_positivos": [],
+            "fatores_atencao": []
+        }
+
+    score = 100
+
+    fatores_positivos = []
+    fatores_atencao = []
+
+    participacao_top_3 = metricas.get("participacao_top_3", 0)
+    maior_participacao = metricas.get("maior_participacao", 0)
+    quantidade_categorias = metricas.get("quantidade_categorias", 0)
+
+    outliers_superiores = metricas["outliers"]["outliers_superiores"]
+    outliers_inferiores = metricas["outliers"]["outliers_inferiores"]
+
+    quantidade_outliers = len(outliers_superiores) + len(outliers_inferiores)
+
+    # Avaliação de concentração Top 3
+    if participacao_top_3 >= 85:
+        score -= 25
+        fatores_atencao.append(
+            "As 3 maiores categorias concentram uma parcela muito alta do resultado."
+        )
+    elif participacao_top_3 >= 70:
+        score -= 15
+        fatores_atencao.append(
+            "Existe concentração relevante nas 3 maiores categorias."
+        )
+    elif participacao_top_3 >= 55:
+        score -= 8
+        fatores_atencao.append(
+            "A concentração nas principais categorias deve ser acompanhada."
+        )
+    else:
+        score += 3
+        fatores_positivos.append(
+            "O resultado está relativamente bem distribuído entre as categorias."
+        )
+
+    # Avaliação da categoria líder
+    if maior_participacao >= 50:
+        score -= 20
+        fatores_atencao.append(
+            "A categoria líder representa mais da metade do total analisado."
+        )
+    elif maior_participacao >= 40:
+        score -= 12
+        fatores_atencao.append(
+            "A categoria líder tem peso muito relevante no resultado."
+        )
+    elif maior_participacao >= 30:
+        score -= 5
+        fatores_atencao.append(
+            "A categoria líder possui participação significativa."
+        )
+    else:
+        score += 3
+        fatores_positivos.append(
+            "Nenhuma categoria individual domina excessivamente o resultado."
+        )
+
+    # Avaliação de outliers
+    if quantidade_outliers >= 3:
+        score -= 15
+        fatores_atencao.append(
+            "Foram encontrados vários valores fora do padrão."
+        )
+    elif quantidade_outliers > 0:
+        score -= 8
+        fatores_atencao.append(
+            "Foram encontrados possíveis valores fora do padrão."
+        )
+    else:
+        score += 5
+        fatores_positivos.append(
+            "Não foram encontrados outliers relevantes."
+        )
+
+    # Avaliação da quantidade de categorias
+    if quantidade_categorias <= 2:
+        score -= 10
+        fatores_atencao.append(
+            "A análise possui poucas categorias, o que limita a leitura gerencial."
+        )
+    elif quantidade_categorias >= 5:
+        score += 2
+        fatores_positivos.append(
+            "A base possui boa quantidade de categorias para comparação."
+        )
+
+    # Avaliação da menor participação
+    menor_participacao = metricas.get("menor_participacao", 0)
+
+    if menor_participacao < 0.5:
+        score -= 5
+        fatores_atencao.append(
+            "Existem categorias com participação muito baixa."
+        )
+
+    # Garante limite entre 0 e 100
+    score = max(0, min(100, round(score)))
+
+    if score >= 85:
+        nivel = "Excelente"
+        descricao = "A análise apresenta boa distribuição, poucos riscos aparentes e indicadores saudáveis."
+    elif score >= 70:
+        nivel = "Bom"
+        descricao = "A análise está positiva, mas existem pontos que merecem acompanhamento."
+    elif score >= 50:
+        nivel = "Atenção"
+        descricao = "A análise apresenta sinais relevantes de concentração, dependência ou distorções."
+    else:
+        nivel = "Crítico"
+        descricao = "A análise indica riscos importantes e deve ser investigada com prioridade."
+
+    return {
+        "score": score,
+        "nivel": nivel,
+        "descricao": descricao,
+        "fatores_positivos": fatores_positivos,
+        "fatores_atencao": fatores_atencao
+    }
+
     return resultado
